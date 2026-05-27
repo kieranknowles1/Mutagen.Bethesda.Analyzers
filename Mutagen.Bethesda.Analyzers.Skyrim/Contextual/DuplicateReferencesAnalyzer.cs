@@ -1,4 +1,4 @@
-﻿using Mutagen.Bethesda.Analyzers.SDK.Analyzers;
+using Mutagen.Bethesda.Analyzers.SDK.Analyzers;
 using Mutagen.Bethesda.Analyzers.SDK.Topics;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
@@ -44,7 +44,7 @@ public class DuplicateReferencesAnalyzer : IContextualAnalyzer
                 // TODO: Exclude any placed objects with references to it
                 var dispensableDuplicates = duplicates
                     .Where(placed => placed is { VirtualMachineAdapter: null, EnableParent: null, NavigationDoorLink: null, Patrol: null, LinkedReferences.Count: 0 })
-                    .Where(placed => placed.SkyrimMajorRecordFlags.HasFlag((SkyrimMajorRecord.SkyrimMajorRecordFlag) PlacedObject.DefaultMajorFlag.Persistent))
+                    .Where(placed => placed.IsPersistent())
                     .ToList();
 
                 // All duplicates are indispensable

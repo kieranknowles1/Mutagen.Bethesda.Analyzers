@@ -42,7 +42,7 @@ public class PersistentTargetAnalyzer : IContextualRecordAnalyzer<IPackageGetter
             if (!param.LinkCache.TryResolve<IPlacedGetter>(targetLink.FormKey, out var placed)) continue;
 
             // Check if it's persistent
-            if (placed.SkyrimMajorRecordFlags.HasFlag((SkyrimMajorRecord.SkyrimMajorRecordFlag)PlacedObject.DefaultMajorFlag.Persistent)) continue;
+            if (placed.IsPersistent()) continue;
 
             param.AddTopic(
                 NonPersistentTarget.Format(package.GetPackageDataName(key, param.LinkCache) ?? key.ToString()));
