@@ -1,6 +1,7 @@
-﻿using Mutagen.Bethesda.Analyzers.SDK.Analyzers;
+using Mutagen.Bethesda.Analyzers.SDK.Analyzers;
 using Mutagen.Bethesda.Analyzers.SDK.Topics;
 using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Skyrim;
 
 namespace Mutagen.Bethesda.Analyzers.Skyrim.Record.Placed;
@@ -13,62 +14,84 @@ public class PersistenceAnalyzer : IContextualRecordAnalyzer<IPlacedGetter>
             Severity.Warning)
         .WithoutFormatting("Placed record is persistent but does not need to be");
 
-    public IEnumerable<TopicDefinition> Topics { get; } = [UnnecessaryPersistence];
+    public static readonly TopicDefinition NotPersistent = MutagenTopicBuilder.FromDiscussion(
+            286,
+            "Not persistent",
+            Severity.Error)
+        .WithoutFormatting("Placed record is not persistent but needs to be");
 
-    private static readonly HashSet<FormKey> AllowedPersistentObjects =
+    public IEnumerable<TopicDefinition> Topics { get; } = [UnnecessaryPersistence, NotPersistent];
+
+    private static readonly HashSet<FormKey> AlwaysPersistentObjects =
     [
-        FormKeys.SkyrimSE.Skyrim.Static.COCMarkerHeading.FormKey,
-        FormKeys.SkyrimSE.Skyrim.Static.PlaneMarker.FormKey,
-        FormKeys.SkyrimSE.Skyrim.Static.RoomMarker.FormKey,
-        FormKeys.SkyrimSE.Skyrim.Static.PortalMarker.FormKey,
-        FormKeys.SkyrimSE.Skyrim.Static.MultiBoundMarker.FormKey,
+        FormKeys.SkyrimSE.Skyrim.Static.XMarker.FormKey,
+        FormKeys.SkyrimSE.Skyrim.Static.XMarkerHeading.FormKey,
+        FormKeys.SkyrimSE.Skyrim.Static.MapMarker.FormKey,
+        FormKeys.SkyrimSE.Skyrim.Static.DragonMarker.FormKey,
+        FormKeys.SkyrimSE.Skyrim.Static.DragonMarkerCrashStrip.FormKey,
     ];
+
+    static bool RequiresPersistence(ContextualRecordAnalyzerParams<IPlacedGetter> param)
+    {
+        var placed = param.Record;
+        var referenced = param.ResolveCache<ILinkUsageCache>()
+            .GetUsagesOf(placed).UsageLinks
+            .Select(l => l.Resolve(param.LinkCache))
+            // Locations list their ref types and persistent location NPCs, but do not require them to be persistent
+            .Where(r => r is not ILocationGetter)
+            // Worldspaces list their large references, but do not require them to be persistent
+            .Where(r => r is not IWorldspaceGetter);
+
+        if (referenced.Any())
+            return true;
+
+        switch (placed)
+        {
+            case IPlacedObjectGetter placedObject:
+                // The CK always sets these as persistent, even if not referenced elsewhere
+                if (AlwaysPersistentObjects.Contains(placedObject.Base.FormKey))
+                    return true;
+                if (placedObject.Base.TryResolve<ITextureSetGetter>(param.LinkCache, out var _))
+                    return true;
+                if (placedObject.Base.TryResolve<IActivatorGetter>(param.LinkCache, out var activator) && !activator.WaterType.IsNull)
+                    return true;
+
+                // Full LOD references need to be persistent. Lights use the same bit with a different meaning that doesn't require persistence
+                if (placedObject.SkyrimMajorRecordFlags.HasFlag((SkyrimMajorRecord.SkyrimMajorRecordFlag)PlacedObject.DefaultMajorFlag.IsFullLod))
+                    if (!placedObject.Base.TryResolve<ILightGetter>(param.LinkCache, out var _))
+                        return true;
+
+                break;
+            case IPlacedNpcGetter placedNpc:
+                if (placedNpc.PersistentLocation.Equals(FormKeys.SkyrimSE.Skyrim.Location.PersistAll))
+                    return true;
+                break;
+        }
+        return false;
+    }
 
     public void AnalyzeRecord(ContextualRecordAnalyzerParams<IPlacedGetter> param)
     {
         var placed = param.Record;
 
-        if (!placed.SkyrimMajorRecordFlags.HasFlag((SkyrimMajorRecord.SkyrimMajorRecordFlag)PlacedObject.DefaultMajorFlag.Persistent)) return;
+        var persistent = placed.IsPersistent();
+        var expected = RequiresPersistence(param);
 
-        // TODO: placed records that is referenced are likely meant to be be persistent
-        // if (references.Any()) return result;
-
-        switch (placed)
+        if (persistent && !expected)
         {
-            case IPlacedObjectGetter placedObjectGetter:
-                if (AllowedPersistentObjects.Contains(placedObjectGetter.Base.FormKey)) return;
-
-                if (placedObjectGetter.MapMarker is not null) return;
-                if (placedObjectGetter.VirtualMachineAdapter is not null) return;
-                if (placedObjectGetter.LinkedReferences.Any()) return;
-                if (placedObjectGetter.LocationRefTypes is not null) return;
-
-                // Base types that are allowed to be persistent
-                if (param.LinkCache.TryResolve<IDoorGetter>(placedObjectGetter.Base.FormKey, out _)) return;
-                if (param.LinkCache.TryResolve<ITextureSetGetter>(placedObjectGetter.Base.FormKey, out _)) return;
-
-                break;
-            // case IPlacedNpcGetter placedNpcGetter:
-            //     if (placedNpcGetter.VirtualMachineAdapter is not null) return result;
-            //     if (placedNpcGetter.LocationRefTypes is not null) return result;
-            //
-            //     var npc = placedNpcGetter.Base.TryResolve(param.LinkCache);
-            //     if (npc is not null) {
-            //         Console.WriteLine("Removing actor persistence: " + (npc.Name?.String ?? npc.EditorID ?? npc.FormKey.ToString()));
-            //     }
-            //
-            //     break;
-            // case IAPlacedTrapGetter placedTrapGetter:
-            //     if (placedTrapGetter.VirtualMachineAdapter is not null) return result;
-            //     if (placedTrapGetter.LinkedReferences.Any()) return result;
-            //     if (placedTrapGetter.LocationRefTypes is not null) return result;
-            //
-            //     break;
+            // TODO: Narrow down when persistence is not required
+            param.AddTopic(UnnecessaryPersistence.Format());
+        }
+        else if (!persistent && expected)
+        {
+            param.AddTopic(NotPersistent.Format());
         }
     }
 
     public IEnumerable<Func<IPlacedGetter, object?>> FieldsOfInterest()
     {
         yield return x => x.SkyrimMajorRecordFlags;
+        yield return x => x is IPlacedObjectGetter o ? o.Base : null;
+        yield return x => x is IPlacedNpcGetter n ? n.PersistentLocation : null;
     }
 }
