@@ -45,6 +45,9 @@ public class PersistenceAnalyzer : IContextualRecordAnalyzer<IPlacedGetter>
         if (referenced.Any())
             return true;
 
+        if (placed.GetPersistLocation().Equals(FormKeys.SkyrimSE.Skyrim.Location.PersistAll))
+            return true;
+
         switch (placed)
         {
             case IPlacedObjectGetter placedObject:
@@ -61,10 +64,6 @@ public class PersistenceAnalyzer : IContextualRecordAnalyzer<IPlacedGetter>
                     if (!placedObject.Base.TryResolve<ILightGetter>(param.LinkCache, out var _))
                         return true;
 
-                break;
-            case IPlacedNpcGetter placedNpc:
-                if (placedNpc.PersistentLocation.Equals(FormKeys.SkyrimSE.Skyrim.Location.PersistAll))
-                    return true;
                 break;
         }
         return false;
