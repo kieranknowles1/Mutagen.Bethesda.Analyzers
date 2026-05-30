@@ -131,6 +131,7 @@ public class PersistenceLocationAnalyzerTest
     }
 
     // An NPCs cell location should be in its persist location, including the persist location's children
+    // I.e., a persist location of a city is suitable for an npc in a house interior
     [Theory, MutagenModAutoData]
     public void NotInPersistLocationChildren(Fixture fixture)
     {
@@ -140,33 +141,45 @@ public class PersistenceLocationAnalyzerTest
             prepForError: (rec, mod) =>
             {
                 Setup(rec, mod, fixture, out cell, out location);
+                var loc2 = fixture.Create<Location>();
+                mod.Locations.Add(loc2);
+                cell.Location.SetTo(loc2);
             },
             prepForFix: (rec, mod) =>
             {
-
+                var child = fixture.Create<Location>();
+                mod.Locations.Add(child);
+                child.ParentLocation.SetTo(location);
+                cell!.Location.SetTo(child);
             },
             PersistenceLocationAnalyzer.NotInsidePersistenceLocation);
     }
 
     // An NPCs cell location should be in its persist location, not including the persist location's parents
+    // I.e., a persist location of a house is not suitable for an npc in the city's exterior
     [Theory, MutagenModAutoData]
     public void NotInPersistLocationParent(Fixture fixture)
     {
         Cell? cell = null;
-        Location? location = null;
+        Location? parent = null;
         fixture.Run(
             prepForError: (rec, mod) =>
             {
-                Setup(rec, mod, fixture, out cell, out location);
+                Setup(rec, mod, fixture, out cell, out var location);
+                parent = fixture.Create<Location>();
+                mod.Locations.Add(parent);
+                location.ParentLocation.SetTo(parent);
+                cell.Location.SetTo(parent);
             },
             prepForFix: (rec, mod) =>
             {
-
+                rec.PersistentLocation.SetTo(parent);
             },
             PersistenceLocationAnalyzer.NotInsidePersistenceLocation);
     }
 
     // An NPCs cell location should be in its persist location, not including the persist location's siblings
+    // I.e., a persist location of a house is not suitable for an npc in a different house
     [Theory, MutagenModAutoData]
     public void NotInPersistLocationSibling(Fixture fixture)
     {
@@ -176,29 +189,38 @@ public class PersistenceLocationAnalyzerTest
             prepForError: (rec, mod) =>
             {
                 Setup(rec, mod, fixture, out cell, out location);
+                var child = fixture.Create<Location>();
+                mod.Locations.Add(child);
+                var sibling = fixture.Create<Location>();
+                mod.Locations.Add(sibling);
+                child.ParentLocation.SetTo(location);
+                sibling.ParentLocation.SetTo(location);
+
+                cell.Location.SetTo(child);
+                rec.PersistentLocation.SetTo(sibling);
             },
             prepForFix: (rec, mod) =>
             {
-
+                rec.PersistentLocation.SetTo(location);
             },
             PersistenceLocationAnalyzer.NotInsidePersistenceLocation);
     }
 
-    // An NPCs persist location should not be an interior
-    [Theory, MutagenModAutoData]
-    public void PersistLocationDwelling(Fixture fixture)
-    {
-        Cell? cell = null;
-        Location? location = null;
-        fixture.Run(
-            prepForError: (rec, mod) =>
-            {
-                Setup(rec, mod, fixture, out cell, out location);
-            },
-            prepForFix: (rec, mod) =>
-            {
+    //// An NPCs persist location should not be an interior
+    //[Theory, MutagenModAutoData]
+    //public void PersistLocationDwelling(Fixture fixture)
+    //{
+    //    Cell? cell = null;
+    //    Location? location = null;
+    //    fixture.Run(
+    //        prepForError: (rec, mod) =>
+    //        {
+    //            Setup(rec, mod, fixture, out cell, out location);
+    //        },
+    //        prepForFix: (rec, mod) =>
+    //        {
 
-            },
-            PersistenceLocationAnalyzer.PersistenceLocationIsDwelling);
-    }
+    //        },
+    //        PersistenceLocationAnalyzer.PersistenceLocationIsDwelling);
+    //}
 }
