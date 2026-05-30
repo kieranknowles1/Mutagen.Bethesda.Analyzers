@@ -34,7 +34,7 @@ public class PersistenceLocationAnalyzer : IContextualRecordAnalyzer<IPlacedNpcG
         var cell = placedNpc.GetCell(param.LinkCache);
         if (cell is null) return;
 
-        var location = cell.Location.TryResolve(param.LinkCache);
+        var location = cell.GetLocation(param.LinkCache);
         if (location is null)
         {
             param.AddTopic(

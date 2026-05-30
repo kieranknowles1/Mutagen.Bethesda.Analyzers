@@ -95,11 +95,10 @@ public class PersistenceLocationAnalyzerTest
                 world.AddCell(cell);
                 mod.Worldspaces.Add(world);
 
-                mod.Cells.AddInteriorCell(cell);
-
                 location = fixture.Create<Location>();
                 mod.Locations.Add(location);
 
+                rec.Placement = new();
                 rec.PersistentLocation.SetTo(location);
             },
             prepForFix: (rec, mod) =>

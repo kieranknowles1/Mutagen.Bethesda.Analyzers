@@ -1,4 +1,4 @@
-﻿using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Skyrim;
 
@@ -7,6 +7,21 @@ namespace Mutagen.Bethesda.Analyzers.Skyrim.Extensions;
 public static class CellExtensions
 {
     public const int CellLength = 4096;
+
+    public static ILocationGetter? GetLocation(this ICellGetter cell, ILinkCache linkCache)
+    {
+        if (cell.Location.TryResolve(linkCache, out var location))
+        {
+            return location;
+        }
+
+        if (cell.IsExteriorCell())
+        {
+            var worldspace = cell.GetWorldspace(linkCache);
+            return worldspace?.Location?.TryResolve(linkCache);
+        }
+        return null;
+    }
 
     public static IEnumerable<ILocationGetter> GetAllLocations(this ICellGetter cell, ILinkCache linkCache)
     {
@@ -77,8 +92,10 @@ public static class CellExtensions
 
     public static IWorldspaceGetter? GetWorldspace(this ICellGetter cell, ILinkCache linkCache)
     {
-        var context = linkCache.ResolveSimpleContext(cell);
-        return context.Parent?.Record as IWorldspaceGetter;
+        if (!linkCache.TryResolveSimpleContext(cell, out var context))
+            return null;
+        context.TryGetParent<IWorldspaceGetter>(out var world);
+        return world;
     }
 
     /// <summary>
