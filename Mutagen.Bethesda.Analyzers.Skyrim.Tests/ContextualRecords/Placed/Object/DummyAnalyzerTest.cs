@@ -13,14 +13,18 @@ public class DummyAnalyzerTest
     [Theory, MutagenModAutoData]
     public void NoLeveledList(Fixture fixture)
     {
+        var item = fixture.Create<Weapon>();
+        item.Keywords = [FormKeys.SkyrimSE.Skyrim.Keyword.Dummy];
+        var list = fixture.Create<LeveledItem>();
         fixture.Run(
             prepForError: (rec, mod) =>
             {
-                rec.Base.SetTo(FormKeys.SkyrimSE.Skyrim.Weapon.DummyBow);
+                mod.Weapons.Add(item);
+                rec.Base.SetTo(item);
             },
             prepForFix: (rec, mod) =>
             {
-                rec.LeveledItemBaseObject.SetTo(FormKeys.SkyrimSE.Skyrim.LeveledItem.LItemBanditWeaponBow);
+                rec.LeveledItemBaseObject.SetTo(list);
             },
             DummyAnalyzer.DummyItemWithoutLeveledList);
     }
@@ -28,11 +32,14 @@ public class DummyAnalyzerTest
     [Theory, MutagenModAutoData]
     public void NotDummy(Fixture fixture)
     {
+        var item = fixture.Create<Weapon>();
+        var list = fixture.Create<LeveledItem>();
         fixture.Run(
             prepForError: (rec, mod) =>
             {
-                rec.Base.SetTo(FormKeys.SkyrimSE.Skyrim.Weapon.LongBow);
-                rec.LeveledItemBaseObject.SetTo(FormKeys.SkyrimSE.Skyrim.LeveledItem.LItemBanditWeaponBow);
+                mod.Weapons.Add(item);
+                rec.Base.SetTo(item);
+                rec.LeveledItemBaseObject.SetTo(list);
             },
             prepForFix: (rec, mod) =>
             {
