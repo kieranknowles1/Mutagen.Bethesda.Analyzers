@@ -288,4 +288,44 @@ public class ConditionAnalyzerTest
             },
             ConditionAnalyzer.LeveledItemParameter);
     }
+
+    // Comparison value should be of the same type as the function returns
+    [Theory, MutagenModAutoData]
+    public void ReturnTypeCompareValue(Fixture fixture)
+    {
+        fixture.Run(
+            prepForError: (rec, mod) =>
+            {
+                rec.Conditions.Add(new ConditionFloat()
+                {
+                    Data = new GetIsIDConditionData(),
+                    ComparisonValue = 123.0f
+                });
+            },
+            prepForFix: (rec, mod) =>
+            {
+                (rec.Conditions[0] as IConditionFloat)!.ComparisonValue = 1.0f;
+            },
+            ConditionAnalyzer.InvalidCompareValue);
+    }
+
+    // Comparison operator should be sensible for the function's return type
+    [Theory, MutagenModAutoData]
+    public void ReturnTypeCompareOperator(Fixture fixture)
+    {
+        fixture.Run(
+            prepForError: (rec, mod) =>
+            {
+                rec.Conditions.Add(new ConditionGlobal()
+                {
+                    Data = new GetIsAliasRefConditionData(),
+                    CompareOperator = CompareOperator.GreaterThan
+                });
+            },
+            prepForFix: (rec, mod) =>
+            {
+                rec.Conditions[0].CompareOperator = CompareOperator.EqualTo;
+            },
+            ConditionAnalyzer.InvalidCompareOperator);
+    }
 }
