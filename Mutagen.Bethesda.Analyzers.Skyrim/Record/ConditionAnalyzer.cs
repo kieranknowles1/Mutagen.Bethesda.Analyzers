@@ -1,5 +1,6 @@
 using Mutagen.Bethesda.Analyzers.SDK.Analyzers;
 using Mutagen.Bethesda.Analyzers.SDK.Topics;
+using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 
 namespace Mutagen.Bethesda.Analyzers.Skyrim.Record;
@@ -16,7 +17,7 @@ public class ConditionAnalyzer : IContextualRecordAnalyzer<ISkyrimMajorRecordGet
             360,
             "Invalid Quest Stage referenced in Condition",
             Severity.Error)
-        .WithFormatting<int, IConditionGetter>("Quest stage {0} referenced in condition {0} is invalid");
+        .WithFormatting<int, IConditionGetter>("Quest stage {0} referenced in condition {1} is invalid");
 
     public static readonly TopicDefinition<INpcGetter> GetDeadCondition = MutagenTopicBuilder.FromDiscussion(
             361,
@@ -48,6 +49,21 @@ public class ConditionAnalyzer : IContextualRecordAnalyzer<ISkyrimMajorRecordGet
             Severity.Error)
         .WithFormatting<ILeveledItemGetter>("Condition used with leveled item {0} as parameter");
 
+    public static readonly TopicDefinition<Condition.Function> UnsupportedFunction = MutagenTopicBuilder.DevelopmentTopic(
+            "Unsupported condition function",
+            Severity.Error)
+        .WithFormatting<Condition.Function>("Condition uses unsupported function {0}");
+
+    public static readonly TopicDefinition<Condition.Function, ConditionDataExtensions.ReturnType, float> InvalidCompareValue = MutagenTopicBuilder.DevelopmentTopic(
+            "Invalid comparison value",
+            Severity.Warning)
+        .WithFormatting<Condition.Function, ConditionDataExtensions.ReturnType, float>("Condition function {0} returns a {1}, but compares against value {2}");
+
+    public static readonly TopicDefinition<Condition.Function, ConditionDataExtensions.ReturnType, CompareOperator> InvalidCompareOperator = MutagenTopicBuilder.DevelopmentTopic(
+            "Invalid comparison operator",
+            Severity.Warning)
+        .WithFormatting<Condition.Function, ConditionDataExtensions.ReturnType, CompareOperator>("Condition function {0} returns a {1}, but uses compare operator {2}");
+
     public IEnumerable<TopicDefinition> Topics { get; } =
     [
         InvalidConditionReference,
@@ -57,7 +73,31 @@ public class ConditionAnalyzer : IContextualRecordAnalyzer<ISkyrimMajorRecordGet
         GetCurrentTimeConditionWithAndOnDayBreak,
         GetCrimeGoldRunOnPlayer,
         LeveledItemParameter,
+        InvalidCompareValue,
+        UnsupportedFunction,
     ];
+
+    static bool ComparisonValueValid(ConditionDataExtensions.ReturnType type, float compareValue)
+    {
+        return type switch
+        {
+            ConditionDataExtensions.ReturnType.Boolean => compareValue is 0 or 1,
+            ConditionDataExtensions.ReturnType.SignedFloat => true,
+            ConditionDataExtensions.ReturnType.SignedInt => float.IsInteger(compareValue),
+            ConditionDataExtensions.ReturnType.UnsignedFloat => compareValue >= 0,
+            ConditionDataExtensions.ReturnType.UnsignedInt => compareValue >= 0 && float.IsInteger(compareValue),
+            _ => true,
+        };
+    }
+
+    static bool ComparisonOperatorValid(ConditionDataExtensions.ReturnType type, CompareOperator op)
+    {
+        return type switch
+        {
+            ConditionDataExtensions.ReturnType.Boolean => op is CompareOperator.EqualTo or CompareOperator.NotEqualTo,
+            _ => true,
+        };
+    }
 
     public void AnalyzeRecord(ContextualRecordAnalyzerParams<ISkyrimMajorRecordGetter> param)
     {
@@ -76,7 +116,7 @@ public class ConditionAnalyzer : IContextualRecordAnalyzer<ISkyrimMajorRecordGet
                             param.AddTopic(
                                 InvalidConditionReference.Format(getEventData.Function.ToString()));
                             break;
-                        case {} conditionData:
+                        case { } conditionData:
                             param.AddTopic(
                                 InvalidConditionReference.Format(conditionData.Function.ToString()));
                             break;
@@ -91,75 +131,79 @@ public class ConditionAnalyzer : IContextualRecordAnalyzer<ISkyrimMajorRecordGet
                         GetDeadCondition.Format(npc));
                     break;
                 case IGetStageConditionDataGetter getStage:
-                {
-                    if (condition is IConditionFloatGetter floatCondition
-                        && getStage.Quest.UsesLink() && getStage.Quest.Link.TryResolve(param.LinkCache, out var quest)
-                        && floatCondition.ComparisonValue != 0
-                        && quest.Stages.All(s => s.Index != (int)floatCondition.ComparisonValue))
                     {
-                        param.AddTopic(
-                            InvalidStageCondition.Format((int)floatCondition.ComparisonValue, condition));
+                        if (condition is IConditionFloatGetter floatCondition
+                            && getStage.Quest.UsesLink() && getStage.Quest.Link.TryResolve(param.LinkCache, out var quest)
+                            && floatCondition.ComparisonValue != 0
+                            && quest.Stages.All(s => s.Index != (int)floatCondition.ComparisonValue))
+                        {
+                            param.AddTopic(
+                                InvalidStageCondition.Format((int)floatCondition.ComparisonValue, condition));
+                        }
+                        break;
                     }
-                    break;
-                }
                 case IGetStageDoneConditionDataGetter getStageDone
                     when getStageDone.Quest.UsesLink() && getStageDone.Quest.Link.TryResolve(param.LinkCache, out var quest2)
                                                        && quest2.Stages.All(s => s.Index != getStageDone.Stage):
                     param.AddTopic(
                         InvalidStageCondition.Format(getStageDone.Stage, condition));
                     break;
-                case IGetCurrentTimeConditionDataGetter when condition is IConditionFloatGetter currentFloatCondition: {
-                    if (i + 1 >= conditions.Length) break;
-
-                    var nextCondition = conditions[i + 1];
-                    if (nextCondition is not IConditionFloatGetter { Data: IGetCurrentTimeConditionDataGetter } nextFloatCondition) break;
-
-                    var firstGreater = currentFloatCondition.CompareOperator is CompareOperator.GreaterThan or CompareOperator.GreaterThanOrEqualTo;
-                    var thenLess = nextFloatCondition.CompareOperator is CompareOperator.LessThan or CompareOperator.LessThanOrEqualTo;
-                    var firstLess = currentFloatCondition.CompareOperator is CompareOperator.LessThan or CompareOperator.LessThanOrEqualTo;
-                    var thenGreater = nextFloatCondition.CompareOperator is CompareOperator.GreaterThan or CompareOperator.GreaterThanOrEqualTo;
-
-                    if (currentFloatCondition.Flags.HasFlag(Condition.Flag.OR))
+                case IGetCurrentTimeConditionDataGetter when condition is IConditionFloatGetter currentFloatCondition:
                     {
-                        if (firstGreater && thenLess && currentFloatCondition.ComparisonValue < nextFloatCondition.ComparisonValue)
+                        if (i + 1 >= conditions.Length) break;
+
+                        var nextCondition = conditions[i + 1];
+                        if (nextCondition is not IConditionFloatGetter { Data: IGetCurrentTimeConditionDataGetter } nextFloatCondition) break;
+
+                        var firstGreater = currentFloatCondition.CompareOperator is CompareOperator.GreaterThan or CompareOperator.GreaterThanOrEqualTo;
+                        var thenLess = nextFloatCondition.CompareOperator is CompareOperator.LessThan or CompareOperator.LessThanOrEqualTo;
+                        var firstLess = currentFloatCondition.CompareOperator is CompareOperator.LessThan or CompareOperator.LessThanOrEqualTo;
+                        var thenGreater = nextFloatCondition.CompareOperator is CompareOperator.GreaterThan or CompareOperator.GreaterThanOrEqualTo;
+
+                        if (currentFloatCondition.Flags.HasFlag(Condition.Flag.OR))
                         {
-                            param.AddTopic(GetCurrentTimeConditionWithOrOnDayBreak.Format());
+                            if (firstGreater && thenLess && currentFloatCondition.ComparisonValue < nextFloatCondition.ComparisonValue)
+                            {
+                                param.AddTopic(GetCurrentTimeConditionWithOrOnDayBreak.Format());
+                            }
+
+                            if (firstLess && thenGreater && currentFloatCondition.ComparisonValue > nextFloatCondition.ComparisonValue)
+                            {
+                                param.AddTopic(GetCurrentTimeConditionWithOrOnDayBreak.Format());
+                            }
+                        }
+                        else
+                        {
+                            if (firstGreater && thenLess && currentFloatCondition.ComparisonValue >= nextFloatCondition.ComparisonValue)
+                            {
+                                param.AddTopic(GetCurrentTimeConditionWithAndOnDayBreak.Format());
+                            }
+
+                            if (firstLess && thenGreater && currentFloatCondition.ComparisonValue <= nextFloatCondition.ComparisonValue)
+                            {
+                                param.AddTopic(GetCurrentTimeConditionWithAndOnDayBreak.Format());
+                            }
                         }
 
-                        if (firstLess && thenGreater && currentFloatCondition.ComparisonValue > nextFloatCondition.ComparisonValue)
-                        {
-                            param.AddTopic(GetCurrentTimeConditionWithOrOnDayBreak.Format());
-                        }
+                        break;
                     }
-                    else
-                    {
-                        if (firstGreater && thenLess && currentFloatCondition.ComparisonValue >= nextFloatCondition.ComparisonValue)
-                        {
-                            param.AddTopic(GetCurrentTimeConditionWithAndOnDayBreak.Format());
-                        }
-
-                        if (firstLess && thenGreater && currentFloatCondition.ComparisonValue <= nextFloatCondition.ComparisonValue)
-                        {
-                            param.AddTopic(GetCurrentTimeConditionWithAndOnDayBreak.Format());
-                        }
-                    }
-
-                    break;
-                }
                 case IGetCrimeGoldConditionDataGetter getCrimeGold:
-                    if (condition.Data.RunsOnPlayer() && getCrimeGold.Faction.UsesLink() && getCrimeGold.Faction.Link.IsNull) {
+                    if (condition.Data.RunsOnPlayer() && getCrimeGold.Faction.UsesLink() && getCrimeGold.Faction.Link.IsNull)
+                    {
                         param.AddTopic(GetCrimeGoldRunOnPlayer.Format());
                     }
 
                     break;
                 case IGetCrimeGoldNonviolentConditionDataGetter getCrimeGoldNonViolent:
-                    if (condition.Data.RunsOnPlayer() && getCrimeGoldNonViolent.Faction.UsesLink() && getCrimeGoldNonViolent.Faction.Link.IsNull) {
+                    if (condition.Data.RunsOnPlayer() && getCrimeGoldNonViolent.Faction.UsesLink() && getCrimeGoldNonViolent.Faction.Link.IsNull)
+                    {
                         param.AddTopic(GetCrimeGoldRunOnPlayer.Format());
                     }
 
                     break;
                 case IGetCrimeGoldViolentConditionDataGetter getCrimeGoldViolent:
-                    if (condition.Data.RunsOnPlayer() && getCrimeGoldViolent.Faction.UsesLink() && getCrimeGoldViolent.Faction.Link.IsNull) {
+                    if (condition.Data.RunsOnPlayer() && getCrimeGoldViolent.Faction.UsesLink() && getCrimeGoldViolent.Faction.Link.IsNull)
+                    {
                         param.AddTopic(GetCrimeGoldRunOnPlayer.Format());
                     }
 
@@ -173,6 +217,14 @@ public class ConditionAnalyzer : IContextualRecordAnalyzer<ISkyrimMajorRecordGet
                     param.AddTopic(LeveledItemParameter.Format(leveledItem));
                     break;
             }
+
+            var retType = condition.Data.GetReturnType();
+            if (retType == ConditionDataExtensions.ReturnType.UnsupportedFunction)
+                param.AddTopic(UnsupportedFunction.Format(condition.Data.Function));
+            if (condition is IConditionFloatGetter conditionFloat && !ComparisonValueValid(retType, conditionFloat.ComparisonValue))
+                param.AddTopic(InvalidCompareValue.Format(condition.Data.Function, retType, conditionFloat.ComparisonValue));
+            if (!ComparisonOperatorValid(retType, condition.CompareOperator))
+                param.AddTopic(InvalidCompareOperator.Format(condition.Data.Function, retType, condition.CompareOperator));
         }
     }
 
