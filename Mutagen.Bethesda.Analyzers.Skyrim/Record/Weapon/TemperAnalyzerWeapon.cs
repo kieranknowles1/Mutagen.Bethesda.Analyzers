@@ -1,6 +1,5 @@
 using Mutagen.Bethesda.Analyzers.SDK.Analyzers;
 using Mutagen.Bethesda.Analyzers.SDK.Topics;
-using Mutagen.Bethesda.Analyzers.Skyrim.Util;
 using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Skyrim;
 
@@ -47,7 +46,7 @@ public class TemperAnalyzerWeapon : IContextualRecordAnalyzer<IWeaponGetter>
                 param.AddTopic(NoTemper.Format());
                 break;
             case > 1:
-                param.AddTopic(MultipleTemper.Format());
+                param.AddTopic(MultipleTemper.Format(), ("Recipes", recipes));
                 break;
         }
     }
