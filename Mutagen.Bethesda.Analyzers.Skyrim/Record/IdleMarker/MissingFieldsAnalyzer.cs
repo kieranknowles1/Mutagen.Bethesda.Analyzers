@@ -1,4 +1,4 @@
-﻿using Mutagen.Bethesda.Analyzers.SDK.Analyzers;
+using Mutagen.Bethesda.Analyzers.SDK.Analyzers;
 using Mutagen.Bethesda.Analyzers.SDK.Topics;
 using Mutagen.Bethesda.Skyrim;
 
@@ -18,7 +18,7 @@ public class MissingFieldsAnalyzer : IIsolatedRecordAnalyzer<IIdleMarkerGetter>
     {
         var idleMarker = param.Record;
 
-        if (idleMarker.Animations is not null && idleMarker.Animations.Count == 0)
+        if (idleMarker.Animations is null || idleMarker.Animations.Count == 0)
         {
             param.AddTopic(
                 NoIdles.Format());
