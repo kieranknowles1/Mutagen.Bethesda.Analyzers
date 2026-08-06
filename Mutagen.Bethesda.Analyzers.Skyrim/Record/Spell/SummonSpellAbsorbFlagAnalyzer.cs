@@ -23,8 +23,8 @@ public class SummonSpellAbsorbFlagAnalyzer: IContextualRecordAnalyzer<ISpellGett
 
         foreach (var effect in spell.Effects)
         {
-            if (effect.BaseEffect.TryResolve(param.LinkCache) is null) continue;
-            if (effect.BaseEffect.TryResolve(param.LinkCache)!.Archetype.Type == MagicEffectArchetype.TypeEnum.SummonCreature)
+            if (!effect.BaseEffect.TryResolve(param.LinkCache, out var baseEffect)) continue;
+            if (baseEffect.Archetype.Type == MagicEffectArchetype.TypeEnum.SummonCreature)
             {
                 param.AddTopic(EmptyEffectList.Format());
             }
