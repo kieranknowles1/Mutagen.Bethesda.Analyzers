@@ -1,12 +1,12 @@
-using Antigen.Skyrim.Record.Placed.Npc;
+using Antigen.Skyrim.Record.Placed;
 using Antigen.Testing.Frameworks;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Testing.AutoData;
 using Xunit;
 
-namespace Antigen.Skyrim.Tests.ContextualRecords.Placed.Npcs;
+namespace Antigen.Skyrim.Tests.ContextualRecords.Placed;
 
-using Fixture = ContextualRecordTestFixture<PersistenceLocationAnalyzer, PlacedNpc, IPlacedNpcGetter>;
+using Fixture = ContextualRecordTestFixture<PersistenceLocationAnalyzer, PlacedNpc, IPlacedGetter>;
 
 public class PersistenceLocationAnalyzerTest
 {
